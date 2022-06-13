@@ -10,5 +10,10 @@ We scrape the [Bihar Land Records](http://land.bihar.gov.in/Ror/RoR.aspx).
 4. Click on the second bullet point (see the picture)
 5. Click on search
 6. Click on 'see' ---see the picture
-7. download the html
+7. download the html and link to it in a metadata CSV
 8. parse the html
+
+### Outputs
+
+1. Metadata CSV that links geographic metadata to individual land record files
+2. CSV with land record data (can be multiple rows per record)
