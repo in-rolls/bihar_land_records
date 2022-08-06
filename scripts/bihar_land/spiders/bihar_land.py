@@ -16,6 +16,10 @@ from scrapy.http import FormRequest
 
 from ..items import (DistrictItem, AccountItem, RightItem)
 
+from lxml import html
+
+DEBUG = False
+
 
 class BiharLandSpider(scrapy.Spider):
     #download_delay = 1
@@ -94,6 +98,38 @@ class BiharLandSpider(scrapy.Spider):
                 meta={'item': item, 'cookiejar': response.meta['cookiejar']})
             break
 
+    def parse_account_items(self, response):
+        tree = html.fromstring(response.body.decode('utf-8'))
+        result = tree.xpath("//span[@id='ContentPlaceHolder1_LblSearchResult']/b/text()")
+        l = len(result)
+        dist = ''
+        subdiv = ''
+        z = ''
+        mauja = ''
+        if l > 1:
+            dist = result[1]
+        if l > 2:
+            subdiv = result[2]
+        if l > 3:
+            z = result[3]
+        if l > 4:
+            mauja = result[4]
+        rows = []
+        for i, e in enumerate(tree.xpath("//table[@id='ContentPlaceHolder1_GridView1']/tr[position()>=2 and position()<=(last() - 1)]")):
+            r = []
+            for e2 in e.xpath('./td'):
+                a = e2.xpath('./descendant-or-self::*/text()')
+                r.append(''.join(a))
+            r = [c.strip() for c in r[:-1]]
+            url = 'http://land.bihar.gov.in/Ror/' + e.xpath(".//a[starts-with(@id, 'ContentPlaceHolder1_GridView1_hlDetails1_')]")[0].attrib['href'].replace(' ', '')
+            r.append(url)
+            # Account Holder No
+            qs = parse_qs(urlparse(url).query)
+            r.append(qs['LHID'][0])
+            r.extend([dist, subdiv, z, mauja])
+            rows.append(r)
+        return rows
+
     def parse_zone_step3(self, response):
         item = response.meta['item']
         self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse Zone Step 3 URL %s (item=%r)' % (response.url, item))
@@ -103,16 +139,23 @@ class BiharLandSpider(scrapy.Spider):
         circle_code = item['circle_code']
         index = response.meta['index']
         page = response.meta['page']
-        fn = 'html/%s-%s-%s-%s-%d-%d.html' % (dist_code, zone, sub_div_code, circle_code, index, page)
-        if not os.path.exists(fn):
-            with open(fn, 'wb') as f:
-                f.write(response.body)
-        dfs = pd.read_html(fn, attrs={'id': 'ContentPlaceHolder1_GridView1'}, encoding='utf-8', header=0)
-        print(dfs[0])
-        #links = response.xpath("//a[re:test(@href, 'ContentPlaceHolder1_GridView1_hlDetails1_\d+$')]")
-        links = response.xpath("//a[starts-with(@id, 'ContentPlaceHolder1_GridView1_hlDetails1_')]")
-        for l in links:
-            print(l.attrib['href'])
+        if DEBUG:
+            fn = 'html/%s-%s-%s-%s-%d-%d.html' % (dist_code, zone, sub_div_code, circle_code, index, page)
+            if not os.path.exists(fn):
+                with open(fn, 'wb') as f:
+                    f.write(response.body)
+            dfs = pd.read_html(fn, attrs={'id': 'ContentPlaceHolder1_GridView1'}, encoding='utf-8', header=0)
+            print(dfs[0])
+            #links = response.xpath("//a[re:test(@href, 'ContentPlaceHolder1_GridView1_hlDetails1_\d+$')]")
+            links = response.xpath("//a[starts-with(@id, 'ContentPlaceHolder1_GridView1_hlDetails1_')]")
+            for l in links:
+                print(l.attrib['href'])
+        else:
+            rows = self.parse_account_items(response)
+            df = pd.DataFrame(rows, columns=AccountItem.fields_to_export)
+            for i in df.to_dict(orient='records'):
+                acc_item = AccountItem(i)
+                yield acc_item
         page += 1
         # For all page:
         state = ''
