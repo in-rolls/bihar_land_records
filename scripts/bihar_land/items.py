@@ -6,8 +6,9 @@
 # https://docs.scrapy.org/en/latest/topics/items.html
 
 import scrapy
-import json    
+import json
 from collections import OrderedDict
+import six
 
 
 class OrderedItem(scrapy.Item):
@@ -18,7 +19,7 @@ class OrderedItem(scrapy.Item):
                 self[k] = v
 
     def __repr__(self):
-        return json.dumps(OrderedDict(self),ensure_ascii = False)  
+        return json.dumps(OrderedDict(self),ensure_ascii = False)
         #ensure_ascii = False ,it make characters show in cjk appearance.
 
 
@@ -37,13 +38,14 @@ class DistrictItem(OrderedItem):
 
 
 class AccountItem(OrderedItem):
-    fields_to_export = ['Order', 'Ryot_Holder_Name', 'Father_Husband_Name', 'Account_Number', 'Khresra_Number', 'Record_of_Rights', 'District', 'Sub_Division', 'Zone', 'Mauja']
+    fields_to_export = ['Order', 'Ryot_Holder_Name', 'Father_Husband_Name', 'Account_Number', 'Khresra_Number', 'Record_of_Rights', 'Account_Holder_No', 'District', 'Sub_Division', 'Zone', 'Mauja']
     Order = scrapy.Field()
     Ryot_Holder_Name = scrapy.Field()
     Father_Husband_Name = scrapy.Field()
     Account_Number = scrapy.Field()
     Khresra_Number = scrapy.Field()
     Record_of_Rights = scrapy.Field()
+    Account_Holder_No = scrapy.Field()
     District = scrapy.Field()
     Sub_Division = scrapy.Field()
     Zone = scrapy.Field()
@@ -51,7 +53,7 @@ class AccountItem(OrderedItem):
 
 
 class RightItem(OrderedItem):
-    fields_to_export = ['Account_Number', 'Rayat_Name', 'Father_Husband_Name', 'Habitat', 'Caste', 'Revenue_Police_Station_No', 'Khesra Number', 'District', 'Zone', 'Mauja', 'Account_Holder_No']
+    fields_to_export = ['District', 'Zone', 'Mauja', 'Account_Holder_No', 'Account_Number', 'Rayat_Name', 'Father_Husband_Name', 'Habitat', 'Caste', 'Revenue_Police_Station_No', 'Khesra Number']
     District = scrapy.Field()
     Zone = scrapy.Field()
     Mauja = scrapy.Field()
