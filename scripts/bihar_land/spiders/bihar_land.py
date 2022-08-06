@@ -31,10 +31,11 @@ class BiharLandSpider(scrapy.Spider):
         fn = filename + '.gz'
         with gzip.open(fn, 'wb') as f:
             f.write(response.body)
-        self.log('Saved file {}'.format(fn) )
+        self.logger.info('Saved file {}'.format(fn) )
         return fn
 
     def parse(self, response):
+        # Parse Districts from Image Map
         """
             How to pass argument to spider:-
             arg = getattr(self, 'arg', None)
@@ -52,11 +53,11 @@ class BiharLandSpider(scrapy.Spider):
         detail = getattr(self, 'detail', 'no')
         if districts:
             s_no_list = ['{:s}.'.format(a.strip()) for a in districts.split(',')]
-        print('Arguments: filter={!s}, districts={!s}, detail={!s}'.format(filter, districts, detail))
+        self.logger.info('Arguments: filter={!s}, districts={!s}, detail={!s}'.format(filter, districts, detail))
 
         for i, area in enumerate(response.xpath("//area[re:test(@href, '.*ImageMap1.*')]")):
             title = area.attrib['title']
-            print('*************', i, area, title)
+            self.logger.debug("Parse District from Image Map: %d, %r, %s".format(i, area, title))
             href = area.attrib['href'].strip()
             m = re.match(".*?\((.*?)\,(.*?)\)", href)
             if m:
@@ -68,16 +69,18 @@ class BiharLandSpider(scrapy.Spider):
                     dont_click = True,
                     dont_filter = True,
                     meta={'src': 'home', 'title': title, 'fork_from_cookiejar': cookiejar, 'cookiejar': str(page * 1000 + i + 1)})
-            break
+            if DEBUG:
+                break
 
     def parse_district(self, response):
-        self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse District URL %s (meta=%r)' % (response.url, response.meta))
+        # Parse Zones from Image Map
+        self.logger.info('Parse District URL %s (meta=%r)' % (response.url, response.meta))
         dist_name = response.xpath("//span[@id='ContentPlaceHolder1_distName']/text()").extract()
-        print(dist_name)
+        self.logger.info('Parse District: %s' % dist_name)
         dfs = pd.read_html(response.body, attrs={'id': 'ContentPlaceHolder1_gvScreen'})
         fn = 'excel/ROR_{!s}_{!s}.xlsx'.format(dist_name[0], datetime.now().strftime('%Y%m%d'))
+        self.logger.info('Save District to Excel: %s' % fn)
         dfs[0].to_excel(fn, index=False)
-        #print(dfs[0])
         item = DistrictItem()
         item['District'] = dist_name[0]
         item['Zone'] = response.xpath("//span[@id='ContentPlaceHolder1_lblCir']/text()").extract()[0].strip()
@@ -91,14 +94,16 @@ class BiharLandSpider(scrapy.Spider):
             title = area.attrib['title']
             href = area.attrib['href'].strip()
             url = 'http://land.bihar.gov.in/Ror/' + href
-            print('*************', i, title, url)
+            self.logger.debug('Parse Zone from Image Map: %d, %s, %s'.format(i, title, url))
             yield FormRequest(url,
                 callback = self.parse_zone,
                 dont_filter = True,
                 meta={'item': item, 'cookiejar': response.meta['cookiejar']})
-            break
+            if DEBUG:
+                break
 
     def parse_account_items(self, response):
+        # Parse Account Items
         tree = html.fromstring(response.body.decode('utf-8'))
         result = tree.xpath("//span[@id='ContentPlaceHolder1_LblSearchResult']/b/text()")
         l = len(result)
@@ -131,14 +136,15 @@ class BiharLandSpider(scrapy.Spider):
         return rows
 
     def parse_zone_step3(self, response):
+        # Step 3: Parse Account List and Pagination
         item = response.meta['item']
-        self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse Zone Step 3 URL %s (item=%r)' % (response.url, item))
+        page = response.meta['page']
+        self.logger.info('Parse Zone Step 3 Page %d URL %s (item=%r)' % (page, response.url, item))
         dist_code = item['district_code']
         zone = item['Zone']
         sub_div_code = item['sub_div_code']
         circle_code = item['circle_code']
         index = response.meta['index']
-        page = response.meta['page']
         if DEBUG:
             fn = 'html/%s-%s-%s-%s-%d-%d.html' % (dist_code, zone, sub_div_code, circle_code, index, page)
             if not os.path.exists(fn):
@@ -146,7 +152,6 @@ class BiharLandSpider(scrapy.Spider):
                     f.write(response.body)
             dfs = pd.read_html(fn, attrs={'id': 'ContentPlaceHolder1_GridView1'}, encoding='utf-8', header=0)
             print(dfs[0])
-            #links = response.xpath("//a[re:test(@href, 'ContentPlaceHolder1_GridView1_hlDetails1_\d+$')]")
             links = response.xpath("//a[starts-with(@id, 'ContentPlaceHolder1_GridView1_hlDetails1_')]")
             for l in links:
                 print(l.attrib['href'])
@@ -164,18 +169,21 @@ class BiharLandSpider(scrapy.Spider):
             state = m.group(1)
         for m in re.finditer(r'\|__VIEWSTATEGENERATOR\|(.*?)\|', response.body.decode('utf-8')):
             gen = m.group(1)
-        print('*******************', gen, len(state), response.url)
+        self.logger.debug('VIEWSTATEGENERATOR=%s, len(VIEWSTATE)=%d, URL=%s'.format(gen, len(state), response.url))
         head = {'X-MicrosoftAjax': 'Delta=true', 'X-Requested-With': 'XMLHttpRequest'}
         try:
             lblmsg = response.xpath("//span[@id='ContentPlaceHolder1_LblMsg']/text()").extract()[0]
             n = int(lblmsg.split('-')[-1])
         except Exception as e:
-            print('*********ERROR:', e)
+            self.logger.error(e)
             n = 0
-        page_count = n // 40 + 1
-
-        #if page <= page_count:
-        if page <= 2:
+        if n == 0:
+            self.logger.info("Parse Zone Step 3 No Result zone=%s, sub_div_code=%s, circle_code=%s, index=%d, page=%d" % (zone, sub_div_code, circle_code, index))
+        if DEBUG:
+            page_count = 2
+        else:
+            page_count = n // 40 + 1
+        if page <= page_count:
             form = FormRequest(response.url,
                     formdata={'__EVENTTARGET': 'ctl00$ContentPlaceHolder1$GridView1', '__EVENTARGUMENT': 'Page$%d' % page,
                     '__VIEWSTATEGENERATOR': gen, '__VIEWSTATE': state,
@@ -199,21 +207,13 @@ class BiharLandSpider(scrapy.Spider):
             yield form
 
     def parse_zone_step2(self, response):
+        # Parse Zone Step 2 - Click Account Search Button
         item = response.meta['item']
-        self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse Zone Step 2 URL %s (item=%r)' % (response.url, item))
-        dist_code = item['district_code']
-        sub_div_code = item['sub_div_code']
-        circle_code = item['circle_code']
-        index = response.meta['index']
-        #with open('html/a-%s-%s-%s-%d.html' % (dist_code, sub_div_code, circle_code, index), 'wb') as f:
-        #    f.write(response.body)
-        key = '1234'
+        self.logger.info('Parse Zone Step 2 URL %s (item=%r)' % (response.url, item))
         gen = response.xpath("//input[@id='__VIEWSTATEGENERATOR']/@value").extract()[0]
         state = response.xpath("//input[@id='__VIEWSTATE']/@value").extract()[0]
-        #print(gen, state)
         head = {'X-MicrosoftAjax': 'Delta=true', 'X-Requested-With': 'XMLHttpRequest'}
         form = FormRequest.from_response(response,
-                  #formdata={'__EVENTTARGET': 'ctl00$ContentPlaceHolder1$RadioButton5', '__EVENTARGUMENT': '',
                   formdata={'__EVENTTARGET': '', '__EVENTARGUMENT': '',
                   '__VIEWSTATEGENERATOR': gen, '__VIEWSTATE': state,
                   'ctl00$ContentPlaceHolder1$ScriptManager1': 'ctl00$ContentPlaceHolder1$ScriptManager1|ctl00$ContentPlaceHolder1$BtnSearch',
@@ -235,21 +235,20 @@ class BiharLandSpider(scrapy.Spider):
                   dont_filter = True,
                   headers=head,
                   meta={'item': response.meta['item'], 'gen': gen, 'state': state, 'page': 1, 'index': response.meta['index']})
-                  #meta={'item': response.meta['item'], 'fork_from_cookiejar': response.meta['cookiejar'], 'cookiejar': key})
         yield form
 
     def parse_zone_step1(self, response):
-        self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse Zone Step 1 URL %s (meta=%r)' % (response.url, response.meta))
+        # Parse Zone Step 1 - Select Mauja from List
+        item = response.meta['item']
+        self.logger.info('Parse Zone Step 1 URL %s (item=%r)' % (response.url, item))
         qs = parse_qs(urlparse(response.url).query)
         dist_code =  qs['DistCode'][0].strip()
         sub_div_code = qs['SubDivCode'][0].strip()
         circle_code = qs['CircleCode'][0].strip()
-        item = response.meta['item']
         item['district_code'] = dist_code
         item['sub_div_code'] = sub_div_code
         item['circle_code'] = circle_code
         yield item
-        print('************** dist_code = %s, subdiv_code = %s, circle_code = %s' % (dist_code, sub_div_code, circle_code))
         gen = response.xpath("//input[@id='__VIEWSTATEGENERATOR']/@value").extract()[0]
         state = response.xpath("//input[@id='__VIEWSTATE']/@value").extract()[0]
         for tr in response.xpath("//table[@id='ContentPlaceHolder1_GridView2']/tr"):
@@ -257,8 +256,8 @@ class BiharLandSpider(scrapy.Spider):
                 m = re.match('.*?(Select\$\d+).*$', tr.attrib['onclick'])
                 if m:
                     sel = m.group(1)
-                    print(sel)
                     index = int(sel.split('$')[1])
+                    self.logger.debug('Selecting %s' % sel)
                     form = FormRequest.from_response(response,
                             formdata={'__EVENTTARGET': 'ctl00$ContentPlaceHolder1$GridView2', '__EVENTARGUMENT': sel,
                             '__VIEWSTATEGENERATOR': gen, '__VIEWSTATE': state,
@@ -275,21 +274,22 @@ class BiharLandSpider(scrapy.Spider):
                             dont_click = True,
                             dont_filter = True,
                             meta={'item': item, 'index': index})
-                            #meta={'item': response.meta['item'], 'fork_from_cookiejar': response.meta['cookiejar'], 'cookiejar': key})
                     yield form
-                    break
+                    if DEBUG:
+                        break
 
     def parse_zone(self, response):
-        self.log('<<<<<<<<<<<<<<<<<<<<<<<Parse Zone URL %s (meta=%r)' % (response.url, response.meta))
+        # Parse Zone - Select "View all Mauja accounts by Khesra number"
+        item = response.meta['item']
+        self.logger.info('Parse Zone URL %s (item=%r)' % (response.url, item))
         qs = parse_qs(urlparse(response.url).query)
         dist_code =  qs['DistCode'][0]
         sub_div_code = qs['SubDivCode'][0]
         circle_code = qs['CircleCode'][0]
-        item = response.meta['item']
         item['district_code'] = dist_code
         item['sub_div_code'] = sub_div_code
         item['circle_code'] = circle_code
-        print('************** dist_code = %s, subdiv_code = %s, circle_code = %s' % (dist_code, sub_div_code, circle_code))
+        self.logger.info('Parse Zone dist_code = %s, subdiv_code = %s, circle_code = %s' % (dist_code, sub_div_code, circle_code))
         gen = response.xpath("//input[@id='__VIEWSTATEGENERATOR']/@value").extract()[0]
         state = response.xpath("//input[@id='__VIEWSTATE']/@value").extract()[0]
         form = FormRequest.from_response(response,
@@ -309,5 +309,4 @@ class BiharLandSpider(scrapy.Spider):
                 dont_click = True,
                 dont_filter = True,
                 meta={'item': item})
-                #meta={'item': response.meta['item'], 'fork_from_cookiejar': response.meta['cookiejar'], 'cookiejar': key})
         yield form

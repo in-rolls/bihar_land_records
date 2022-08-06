@@ -122,7 +122,7 @@ class CustomCookiesMiddleware(CookiesMiddleware):
 
         cookiejarkey = request.meta.get("cookiejar")
         old_cookiejarkey = request.meta.get('fork_from_cookiejar')
-        print('%r ******* OLD=%s, NEW=%s ********' % (request, old_cookiejarkey, cookiejarkey))
+        spider.logger.debug('Custom Cookies %r OLD=%s, NEW=%s' % (request, old_cookiejarkey, cookiejarkey))
 
         if old_cookiejarkey:
             old_jar = self.jars[old_cookiejarkey]
