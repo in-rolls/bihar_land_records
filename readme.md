@@ -22,10 +22,10 @@ v2 name_of_father
 v3 residence
 v4 jati
 v5 thana
-v5 district
-v6 anchal
-v7 village
-v8 khatadari // account holder number
+v6 district
+v7 anchal
+v8 village
+v9 khatadari // account holder number
 c1 khata 
 c2 name_of_ryot2
 c3 khasra // plot number
