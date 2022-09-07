@@ -1,4 +1,4 @@
-### Bihar Land Records
+## Bihar Land Records
 
 We scrape the [Bihar Land Records](http://land.bihar.gov.in/Ror/RoR.aspx). 
 
@@ -6,11 +6,6 @@ We scrape the [Bihar Land Records](http://land.bihar.gov.in/Ror/RoR.aspx).
 
 The data are hosted on Harvard Dataverse at: https://doi.org/10.7910/DVN/BI4KZS
 It is only available to researchers with a valid academic affiliation and with an approved IRB application.
-
-### Files
-
-1. Metadata CSV that links geographic metadata to individual land record files
-2. CSV with land record data (can be multiple rows per record)
 
 #### Data Dictionary
 
@@ -41,3 +36,5 @@ c12 gair_dakhildar
 c13 orders
 c14 jamabandi
 ```
+
+Some of the accounts have no land record data attached to them. For instance, http://land.bihar.gov.in/Ror/ViewRoRReportNew.aspx?SID=0pk0y0fa3lswwz1nc4zuyl3w&LHID=3101090651000035&KNo=32 
